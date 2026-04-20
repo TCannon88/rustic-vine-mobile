@@ -179,6 +179,73 @@ export default {
       }
     }
 
+    // ── GET /group-feed ───────────────────────────────────────────────────────
+    // Server-side proxy for Wix Groups Feed API.
+    // Returns the latest posts from the Insiders group, cached 5 minutes.
+    // Requires WIX_SITE_ID, WIX_API_KEY, and WIX_GROUP_ID worker secrets.
+    if (method === 'GET' && url.pathname === '/group-feed') {
+      const limit    = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 50)
+      const cacheKey = `group_feed_${limit}`
+
+      // KV cache check
+      const cached = await env.RUSTIC_VINE_KV.get(cacheKey)
+      if (cached) {
+        const { data, ts } = JSON.parse(cached)
+        if (Date.now() - ts < 5 * 60 * 1000) return json(data)
+      }
+
+      const WIX_SITE_ID = env.WIX_SITE_ID
+      const WIX_API_KEY = env.WIX_API_KEY
+      const WIX_GROUP_ID = env.WIX_GROUP_ID
+      if (!WIX_SITE_ID || !WIX_API_KEY || !WIX_GROUP_ID) {
+        return json({ posts: [], error: 'Worker not configured for group feed' })
+      }
+
+      try {
+        // Wix Groups Feed v1 — list feed items for a group
+        const wixRes = await fetch(
+          `https://www.wixapis.com/groups/v1/groups/${WIX_GROUP_ID}/feed`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': WIX_API_KEY,
+              'wix-site-id':   WIX_SITE_ID,
+              'Content-Type':  'application/json',
+            },
+          }
+        )
+
+        if (!wixRes.ok) {
+          const errText = await wixRes.text().catch(() => '')
+          console.error(`Wix group feed error ${wixRes.status}: ${errText}`)
+          return json({ posts: [], error: `Wix API ${wixRes.status}` })
+        }
+
+        const wixData = await wixRes.json()
+
+        // The feed response contains 'feedItems' or 'items'
+        const rawItems = wixData.feedItems ?? wixData.items ?? []
+        const posts = rawItems.slice(0, limit).map(normaliseGroupFeedItem)
+
+        const payload = {
+          posts,
+          groupId:   WIX_GROUP_ID,
+          fetchedAt: new Date().toISOString(),
+        }
+
+        await env.RUSTIC_VINE_KV.put(
+          cacheKey,
+          JSON.stringify({ data: payload, ts: Date.now() }),
+          { expirationTtl: 300 }
+        )
+
+        return json(payload)
+      } catch (e) {
+        console.error('Group feed proxy error:', e)
+        return json({ posts: [], error: 'Fetch failed' })
+      }
+    }
+
     // ── POST /subscribe ───────────────────────────────────────────────────────
     if (method === 'POST' && url.pathname === '/subscribe') {
       let sub
@@ -351,5 +418,47 @@ function normaliseWixPost(p) {
     coverImage,
     publishedDate: p.firstPublishedDate ?? p.publishedDate ?? null,
     url:           `https://www.therustic-vine.com/post/${p.slug}`,
+  }
+}
+
+// ── Wix Group Feed item normaliser ────────────────────────────────────────────
+// Maps a raw Wix Groups Feed item to the shape consumed by GroupFeed.jsx
+function normaliseGroupFeedItem(item) {
+  // Author info — may be under item.createdBy or item.author
+  const author = item.createdBy ?? item.author ?? {}
+  const authorName  = author.name ?? author.nickname ?? 'Community Member'
+  const authorPhoto = author.imageUrl ?? author.photo?.url ?? null
+
+  // Content — may be plainText or rich content
+  const rawText  = item.content?.plainText ?? item.plainTextContent ?? ''
+  const content  = rawText.replace(/<[^>]+>/g, '').trim()
+
+  // Media — first image from the post
+  const mediaList = item.media ?? item.content?.media ?? []
+  const firstImg  = Array.isArray(mediaList) ? mediaList[0] : null
+  const mediaUrl  = firstImg?.image?.url
+    ?? firstImg?.wixMedia?.image?.url
+    ?? firstImg?.url
+    ?? null
+
+  // Reactions / comments
+  const reactions = item.reactions ?? item.reactionsSummary ?? {}
+  const totalReactions = Object.values(reactions).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0)
+  const commentCount   = item.commentCount ?? item.totalComments ?? 0
+
+  // Deep-link to the post in the Wix group
+  const postId   = item.id ?? item.feedItemId
+  const groupUrl = `https://www.therustic-vine.com/groups/${item.groupId ?? ''}/discussion/${postId ?? ''}`
+
+  return {
+    id:           postId,
+    authorName,
+    authorPhoto,
+    content,
+    mediaUrl,
+    totalReactions,
+    commentCount,
+    createdDate:  item._createdDate ?? item.createdDate ?? null,
+    groupUrl,
   }
 }

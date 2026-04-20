@@ -1,6 +1,7 @@
 import { useWixAuth } from '../hooks/useWixAuth.js'
 import { useWixGroups } from '../hooks/useWixGroups.js'
 import { StarIcon, UserCircleIcon, ChevronRightIcon } from '../components/Icons.jsx'
+import GroupFeed from '../components/GroupFeed.jsx'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -286,6 +287,9 @@ function MemberContent({ currentMember, groupInfo, recentMembers, onLogout }) {
           </div>
         </section>
       )}
+
+      {/* Group Feed — live posts from the Wix Insiders group */}
+      <GroupFeed enabled={true} />
 
       {/* Group links */}
       <section className="mt-4 px-4 space-y-2">
