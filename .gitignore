@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build outputs
+dist/
+dist-ssr/
+
+# env files (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Wrangler / Cloudflare
+.wrangler/
+cloudflare-worker/.dev.vars
+cloudflare-worker/node_modules/
+
+# Mux credentials (keep gitignored)
+*.env
+
+# editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*

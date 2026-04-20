@@ -1,0 +1,263 @@
+@import 'tailwindcss';
+
+/* ── Tailwind v4: theme tokens defined in CSS ──────────────────────────────── */
+@theme {
+  /* ── Sage Green — Primary Brand Accent #8DA089 ───────────────────────────── */
+  --color-sage-50:  #f2f6f1;
+  --color-sage-100: #e4ede2;
+  --color-sage-200: #c8dac4;
+  --color-sage-300: #a9c4a4;
+  --color-sage-400: #8DA089;   /* ← Brand Sage */
+  --color-sage-500: #7a8d76;
+  --color-sage-600: #637862;
+  --color-sage-700: #4e604e;
+  --color-sage-800: #3a473a;
+  --color-sage-900: #272f27;
+
+  /* ── Burgundy remapped → Charcoal/Sage hybrid for seamless token reuse ───── *
+   * 50–300  : warm sand-tinted neutrals (backgrounds, subtle borders)          *
+   * 400–600 : sage green mid-range (hover states, secondary actions)            *
+   * 700     : #8DA089 brand sage  — primary buttons, active nav, accents        *
+   * 800     : #333333 charcoal    — headings, high-contrast text                *
+   * 900–950 : near-black                                                        */
+  --color-burgundy-50:  #f4f6f3;
+  --color-burgundy-100: #e6ede4;
+  --color-burgundy-200: #D2C4B5;   /* sand tone — warm borders */
+  --color-burgundy-300: #b9c9b5;
+  --color-burgundy-400: #9db89a;
+  --color-burgundy-500: #8DA089;   /* brand sage */
+  --color-burgundy-600: #728573;   /* sage hover */
+  --color-burgundy-700: #8DA089;   /* ← PRIMARY ACTION: buttons, active nav */
+  --color-burgundy-800: #333333;   /* ← PRIMARY TEXT: headings */
+  --color-burgundy-900: #222222;
+  --color-burgundy-950: #141414;
+
+  /* ── Vine palette (legacy warm tones kept for any warm detail use) ────────── */
+  --color-vine-50:  #F9F7F2;
+  --color-vine-100: #F0EBE0;
+  --color-vine-200: #E0D4C0;
+  --color-vine-300: #C9B99A;
+  --color-vine-400: #B09A79;
+  --color-vine-500: #8A7555;
+  --color-vine-600: #6A5940;
+  --color-vine-700: #4E4130;
+  --color-vine-800: #342B1F;
+  --color-vine-900: #1C1710;
+
+  /* ── Sand / Tan — Secondary Neutral #D2C4B5 ─────────────────────────────── */
+  --color-sand-100: #f5f0e8;
+  --color-sand-200: #e8ddd1;
+  --color-sand-300: #D2C4B5;   /* ← Brand Sand */
+  --color-sand-400: #bfad9e;
+  --color-sand-500: #a89382;
+  --color-sand-600: #8f7b6b;
+
+  /* ── Cream — Main Background #F9F7F2 ─────────────────────────────────────── */
+  --color-cream: #F9F7F2;
+
+  /* ── Gold — Warm Accent for hero CTAs ───────────────────────────────────── */
+  --color-gold:       #C4AD8B;   /* warm sandy gold */
+  --color-gold-light: #D9C4A0;
+
+  /* Typography */
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-body:    Inter, system-ui, sans-serif;
+
+  /* ── Shadows ─────────────────────────────────────────────────────────────── */
+  --shadow-warm:    0 4px 24px rgba(141, 160, 137, 0.18);  /* sage shadow */
+  --shadow-warm-lg: 0 8px 40px rgba(141, 160, 137, 0.28);
+  --shadow-gold:    0 4px 16px rgba(196, 173, 139, 0.38);
+
+  /* Animations */
+  --animate-fade-in:      fadeIn 0.4s ease-out;
+  --animate-slide-up:     slideUp 0.4s ease-out;
+  --animate-pulse-slow:   pulse 3s ease-in-out infinite;
+  --animate-shimmer:      shimmer 2s linear infinite;
+  --animate-bounce-gentle: bounceGentle 2s ease-in-out infinite;
+  --animate-live-dot:     liveDot 1.5s ease-in-out infinite;
+
+  /* Keyframes */
+  --keyframes-fadeIn: {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  };
+  --keyframes-slideUp: {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  };
+  --keyframes-shimmer: {
+    from { background-position: -200% 0; }
+    to   { background-position:  200% 0; }
+  };
+  --keyframes-bounceGentle: {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+  };
+  --keyframes-liveDot: {
+    0%, 100% { opacity: 1; transform: scale(1);   }
+    50%      { opacity: 0.5; transform: scale(0.8); }
+  };
+}
+
+@layer base {
+  :root {
+    --color-brand:  #8DA089;   /* sage green */
+    --color-gold:   #C4AD8B;
+    --color-cream:  #F9F7F2;
+    --safe-area-top:    env(safe-area-inset-top,    0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html {
+    @apply antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-cream font-body text-stone-700;
+    padding-top:    var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display;
+    color: #333333;
+  }
+
+  * { box-sizing: border-box; }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-sage-400;
+  }
+}
+
+@layer components {
+  /* ── Buttons ────────────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-sage-400 hover:bg-sage-500 active:bg-sage-600
+           text-white font-semibold tracking-wide
+           px-6 py-3 rounded-xl
+           shadow-warm hover:shadow-warm-lg
+           transition-all duration-200 ease-out
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2
+           bg-gold hover:bg-gold-light active:bg-gold
+           font-bold tracking-wide
+           px-6 py-3 rounded-xl
+           shadow-gold hover:shadow-gold
+           transition-all duration-200 ease-out;
+    color: #333333;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2
+           border-2 border-sage-400 text-sage-600
+           hover:bg-sage-400 hover:text-white
+           font-semibold tracking-wide
+           px-6 py-3 rounded-xl
+           transition-all duration-200 ease-out;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-sage-600 hover:bg-sage-100
+           font-medium px-4 py-2 rounded-lg
+           transition-all duration-200 ease-out;
+  }
+
+  /* ── Cards ──────────────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-2xl shadow-warm border border-sand-200
+           overflow-hidden transition-shadow duration-200
+           hover:shadow-warm-lg;
+  }
+
+  .card-glass {
+    @apply backdrop-blur-sm bg-white/80 rounded-2xl border border-white/60
+           shadow-warm overflow-hidden;
+  }
+
+  /* ── Badges ─────────────────────────────────────────────────────────────── */
+  .badge-live {
+    @apply inline-flex items-center gap-1.5 bg-red-500 text-white
+           text-xs font-bold uppercase tracking-widest
+           px-2.5 py-1 rounded-full;
+  }
+
+  .badge-insider {
+    @apply inline-flex items-center gap-1 bg-sage-400 text-white
+           text-xs font-bold uppercase tracking-wider
+           px-2.5 py-1 rounded-full shadow-warm;
+  }
+
+  .badge-new {
+    @apply inline-flex items-center bg-sage-500 text-white
+           text-xs font-semibold
+           px-2 py-0.5 rounded-full;
+  }
+
+  /* ── Skeleton loader ─────────────────────────────────────────────────────── */
+  .skeleton {
+    @apply relative overflow-hidden bg-stone-100 rounded-lg;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.7) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* ── Bottom nav safe area ────────────────────────────────────────────────── */
+  .nav-safe {
+    padding-bottom: max(12px, var(--safe-area-bottom));
+  }
+
+  /* ── Video player container ──────────────────────────────────────────────── */
+  .player-wrapper {
+    @apply relative w-full bg-black overflow-hidden;
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .tap-highlight-none {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ── Gradient utilities ──────────────────────────────────────────────────── */
+
+  /* Hero / header gradient — deep sage to mid-sage (replaces dark burgundy) */
+  .bg-vine-gradient {
+    background: linear-gradient(135deg, #3a4f3a 0%, #4e6150 40%, #647a62 75%, #8DA089 100%);
+  }
+
+  /* Gold CTA accent strip */
+  .bg-gold-gradient {
+    background: linear-gradient(135deg, #C4AD8B 0%, #D9C4A0 50%, #C4AD8B 100%);
+  }
+
+  /* Cream section gradient */
+  .bg-cream-gradient {
+    background: linear-gradient(180deg, #F9F7F2 0%, #EDE8DE 100%);
+  }
+}

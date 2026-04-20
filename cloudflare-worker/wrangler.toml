@@ -1,0 +1,23 @@
+name = "rustic-vine-worker"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+# ── KV Namespace ──────────────────────────────────────────────────────────────
+# Create with: wrangler kv:namespace create RUSTIC_VINE_KV
+# Then replace the id values below with the output IDs.
+[[kv_namespaces]]
+binding  = "RUSTIC_VINE_KV"
+id       = "5e207de3807343af93cc5f3760817a2a"
+preview_id = "0c29ba2c92204fa0b26e54f0661b48d0"
+
+# ── Secrets (set via `wrangler secret put <NAME>`) ────────────────────────────
+# VAPID_PUBLIC_KEY
+# VAPID_PRIVATE_KEY
+# ABLY_ROOT_KEY
+# MUX_TOKEN_ID
+# MUX_TOKEN_SECRET
+# NOTIFY_ADMIN_KEY  (a random string used to protect POST /notify)
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+# Uncomment and update when deploying to production:
+# routes = [{ pattern = "api.therustic-vine.com/*", zone_name = "therustic-vine.com" }]
