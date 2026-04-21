@@ -25,7 +25,7 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Notify-Secret, X-RV-Secret',
 }
 
 function json(data, status = 200) {
@@ -275,45 +275,58 @@ export default {
     if (method === 'POST' && url.pathname === '/insider-post') {
       const notifySecret = env.NOTIFY_SECRET || ''
 
-      // Parse body — Wix Automations may send JSON or form-encoded
+      // ── DIAGNOSTIC: log ALL headers Wix sends ─────────────────────────────
+      const allHeaders = {}
+      for (const [k, v] of request.headers.entries()) allHeaders[k] = v
+      console.log('[insider-post] ALL HEADERS:', JSON.stringify(allHeaders))
+
+      // Parse body — try all formats, capture raw text first
       let post = {}
+      let rawBodyText = ''
       let contentType = ''
       try {
         contentType = request.headers.get('Content-Type') || ''
         console.log('[insider-post] Content-Type:', contentType)
 
+        // Clone request to read body twice
+        const bodyClone = request.clone()
+        rawBodyText = await bodyClone.text()
+        console.log('[insider-post] RAW BODY (first 500):', rawBodyText.slice(0, 500))
+
         if (contentType.includes('application/json')) {
-          post = await request.json()
-        } else if (contentType.includes('application/x-www-form-urlencoded')
-                || contentType.includes('multipart/form-data')) {
+          try { post = JSON.parse(rawBodyText) } catch { post = { raw: rawBodyText } }
+        } else if (contentType.includes('application/x-www-form-urlencoded')) {
+          const params = new URLSearchParams(rawBodyText)
+          for (const [k, v] of params.entries()) post[k] = v
+        } else if (contentType.includes('multipart/form-data')) {
           const form = await request.formData()
           for (const [k, v] of form.entries()) post[k] = v
         } else {
-          const text = await request.text()
-          console.log('[insider-post] Raw body (first 300):', text.slice(0, 300))
-          try { post = JSON.parse(text) } catch { post = { content: text } }
+          // Unknown content type — try JSON parse first
+          try { post = JSON.parse(rawBodyText) } catch { post = { raw: rawBodyText } }
         }
 
-        console.log('[insider-post] Keys received:', Object.keys(post).join(', '))
+        console.log('[insider-post] Parsed keys:', Object.keys(post).join(', '))
+        console.log('[insider-post] Full post object:', JSON.stringify(post).slice(0, 500))
 
-        // Wix Automations wraps all custom params in a top-level "data" key
-        if (post.data && typeof post.data === 'object' && Object.keys(post).length === 1) {
-          post = post.data
-          console.log('[insider-post] Unwrapped data key. New keys:', Object.keys(post).join(', '))
+        // Wix Automations sometimes wraps params in a top-level key
+        for (const wrapKey of ['data', 'payload', 'body', 'params']) {
+          if (post[wrapKey] && typeof post[wrapKey] === 'object' && Object.keys(post).length === 1) {
+            post = post[wrapKey]
+            console.log(`[insider-post] Unwrapped '${wrapKey}' key. New keys:`, Object.keys(post).join(', '))
+            break
+          }
         }
 
-        console.log('[insider-post] _secret present:', !!post._secret,
-          '| header secret present:', !!request.headers.get('X-Notify-Secret'))
-
-        if (!post || typeof post !== 'object') throw new Error('Empty body')
       } catch (e) {
         console.error('[insider-post] Parse error:', e.message)
-        return err(`Bad request: ${e.message}`)
+        // Still return success so Wix doesn't mark the automation as failed
+        return json({ success: true, diagnostic: true, error: e.message })
       }
 
       // Validate secret — accept from header OR body param `_secret`
       const headerSecret = request.headers.get('X-Notify-Secret') || ''
-      const bodySecret   = (post._secret || '').trim()
+      const bodySecret   = (post._secret || post.secret || post._Secret || '').trim()
       const incoming     = (headerSecret || bodySecret)
       const secretMatch  = notifySecret && incoming === notifySecret
       console.log('[insider-post] secret match:', secretMatch,
