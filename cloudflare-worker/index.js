@@ -295,6 +295,13 @@ export default {
         }
 
         console.log('[insider-post] Keys received:', Object.keys(post).join(', '))
+
+        // Wix Automations wraps all custom params in a top-level "data" key
+        if (post.data && typeof post.data === 'object' && Object.keys(post).length === 1) {
+          post = post.data
+          console.log('[insider-post] Unwrapped data key. New keys:', Object.keys(post).join(', '))
+        }
+
         console.log('[insider-post] _secret present:', !!post._secret,
           '| header secret present:', !!request.headers.get('X-Notify-Secret'))
 
@@ -318,6 +325,20 @@ export default {
 
       // Remove the secret from the post object so it's not stored in KV
       delete post._secret
+
+      // Normalize keys — Wix Automations lowercases all param names
+      if (post.authorname  && !post.authorName)  { post.authorName  = post.authorname;  delete post.authorname  }
+      if (post.groupurl    && !post.groupUrl)     { post.groupUrl    = post.groupurl;    delete post.groupurl    }
+      if (post.hasMedia    === undefined && post.hasmedia !== undefined) {
+        post.hasMedia = post.hasmedia; delete post.hasmedia
+      }
+
+      // If authorName is an email address, replace with a friendly fallback
+      if (post.authorName && post.authorName.includes('@')) {
+        post.authorName = post.authorName.split('@')[0]
+          .replace(/[._-]/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase())
+      }
 
       // Stamp with server time if missing
       if (!post.createdDate) post.createdDate = new Date().toISOString()
