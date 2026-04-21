@@ -42,12 +42,11 @@ function GroupHeader({ groupInfo }) {
   return (
     <div>
       {/* Banner */}
-      <div className="w-full overflow-hidden" style={{ maxHeight: '200px' }}>
+      <div className="w-full overflow-hidden">
         <img
           src="/RusticVineInsiders.png"
           alt="Rustic Vine Insiders"
-          className="w-full object-cover object-center"
-          style={{ maxHeight: '200px' }}
+          className="w-full object-contain"
         />
       </div>
 
@@ -344,7 +343,7 @@ export default function Insiders() {
   const pageLoading = auth.loading || (auth.isLoggedIn && groups.loading)
 
   return (
-    <main id="insiders-page" className="min-h-screen bg-cream">
+    <main id="insiders-page" className="min-h-screen bg-cream pt-14">
       {/* Banner + group header — always visible */}
       <GroupHeader groupInfo={groups.groupInfo} />
 
