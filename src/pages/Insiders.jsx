@@ -227,7 +227,7 @@ function MemberAvatar({ member, index }) {
 }
 
 /** Full member experience — group feed + community grid */
-function MemberContent({ currentMember, groupInfo, recentMembers, onLogout }) {
+function MemberContent({ currentMember, groupInfo, recentMembers, onLogout, tokens }) {
   const displayName = currentMember?.profile?.nickname
     ?? currentMember?.contact?.firstName
     ?? 'Friend'
@@ -289,7 +289,7 @@ function MemberContent({ currentMember, groupInfo, recentMembers, onLogout }) {
       )}
 
       {/* Group Feed — live posts from the Wix Insiders group */}
-      <GroupFeed tokens={auth.tokens} enabled={true} />
+      <GroupFeed tokens={tokens} enabled={true} />
 
       {/* Group links */}
       <section className="mt-4 px-4 space-y-2">
@@ -401,6 +401,7 @@ export default function Insiders() {
           groupInfo={groups.groupInfo}
           recentMembers={groups.recentMembers}
           onLogout={auth.logout}
+          tokens={auth.tokens}
         />
       )}
     </main>
