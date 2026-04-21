@@ -1,1 +1,5 @@
-/* /index.html 200
+/live /index.html 200
+/shop /index.html 200
+/insiders /index.html 200
+/auth/callback /index.html 200
+/account /index.html 200
