@@ -6,6 +6,8 @@
  *   GET  /featured-product  — current featured product ID (for live stream)
  *   GET  /products          — proxied Wix Headless product catalog (avoids CORS)
  *   GET  /blog-posts        — proxied Wix Blog posts with 15-min KV cache
+ *   GET  /insider-feed      — Insiders group feed (served from KV; posts pushed by Velo/Automations)
+ *   POST /insider-post      — webhook: Velo events / Wix Automations push a post into KV
  *   POST /subscribe         — register a Web Push subscription
  *   POST /notify            — broadcast a push notification to all subscribers
  *
@@ -13,11 +15,11 @@
  *   RUSTIC_VINE_KV
  *
  * Worker secrets (set via `wrangler secret put`):
- *   VAPID_PUBLIC_KEY
- *   VAPID_PRIVATE_KEY
+ *   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
  *   ABLY_ROOT_KEY
- *   MUX_TOKEN_ID
- *   MUX_TOKEN_SECRET
+ *   MUX_TOKEN_ID, MUX_TOKEN_SECRET
+ *   RV_FEED_SECRET      — shared secret for /insider-feed auth header from PWA
+ *   NOTIFY_SECRET       — shared secret for /insider-post Velo webhook
  */
 
 const CORS_HEADERS = {
@@ -247,66 +249,61 @@ export default {
     }
 
     // ── GET /insider-feed ─────────────────────────────────────────────────────
-    // Proxy for the Wix Velo insidersFeed HTTP function.
-    // - Requires Authorization header (Wix member token from PWA)
-    // - Caches in KV for 60 seconds to avoid hammering Wix
-    // - Injects X-RV-Secret so the secret never touches the browser
+    // Serves the Insiders group feed from KV.
+    // Posts are written into KV by POST /insider-post (Velo events / Automations).
+    // Requires Authorization header so anonymous callers can't harvest member data.
     if (method === 'GET' && url.pathname === '/insider-feed') {
-      // Require a member token — must be present (we trust the PWA gate for
-      // actual membership checks; here we just reject anonymous callers)
       const authHeader = request.headers.get('Authorization') || ''
-      if (!authHeader.startsWith('Bearer ') && !authHeader) {
+      if (!authHeader) {
         return err('Unauthorized', 401)
       }
 
-      const WIX_VELO_URL = env.WIX_VELO_URL || 'https://www.therustic-vine.com'
-      const RV_FEED_SECRET = env.RV_FEED_SECRET
+      const raw = await env.RUSTIC_VINE_KV.get('insider_feed_posts')
+      const posts = raw ? JSON.parse(raw) : []
 
-      if (!RV_FEED_SECRET) {
-        return json({ posts: [], error: 'Feed not configured on server', fetchedAt: new Date().toISOString() })
+      return json({
+        posts,
+        fetchedAt: new Date().toISOString(),
+        source:    'kv',
+      })
+    }
+
+    // ── POST /insider-post ────────────────────────────────────────────────────
+    // Webhook receiver — Wix Velo events / Automations call this when a group
+    // post is created. Validates X-Notify-Secret, prepends the post to the KV
+    // feed array (max 50 posts kept).
+    if (method === 'POST' && url.pathname === '/insider-post') {
+      const notifySecret = env.NOTIFY_SECRET || ''
+      const incoming     = request.headers.get('X-Notify-Secret') || ''
+
+      if (!notifySecret || incoming !== notifySecret) {
+        return err('Unauthorized', 401)
       }
 
-      // KV cache check (60-second TTL)
-      const cacheKey = 'insider_feed_cache'
-      const cached = await env.RUSTIC_VINE_KV.get(cacheKey)
-      if (cached) {
-        const { data, ts } = JSON.parse(cached)
-        if (Date.now() - ts < 60 * 1000) {
-          return json(data)
-        }
-      }
-
+      let post
       try {
-        const wixRes = await fetch(
-          `${WIX_VELO_URL}/_functions/insidersFeed`,
-          {
-            headers: {
-              'X-RV-Secret': RV_FEED_SECRET,
-              'Accept':      'application/json',
-            },
-          }
-        )
-
-        if (!wixRes.ok) {
-          const errText = await wixRes.text().catch(() => '')
-          console.error(`Velo insidersFeed error ${wixRes.status}: ${errText}`)
-          return json({ posts: [], error: `Wix returned ${wixRes.status}`, fetchedAt: new Date().toISOString() })
-        }
-
-        const data = await wixRes.json()
-
-        // Cache the response
-        await env.RUSTIC_VINE_KV.put(
-          cacheKey,
-          JSON.stringify({ data, ts: Date.now() }),
-          { expirationTtl: 120 }  // KV expiry as safety net
-        )
-
-        return json(data)
+        post = await request.json()
+        if (!post || typeof post !== 'object') throw new Error('Empty body')
       } catch (e) {
-        console.error('insider-feed proxy error:', e)
-        return json({ posts: [], error: 'Fetch failed', fetchedAt: new Date().toISOString() })
+        return err(`Bad request: ${e.message}`)
       }
+
+      // Stamp with server time if missing
+      if (!post.createdDate) post.createdDate = new Date().toISOString()
+      if (!post.id)          post.id = `${Date.now()}`
+
+      // Load existing posts, prepend new one, keep newest 50
+      const existing = await env.RUSTIC_VINE_KV.get('insider_feed_posts')
+      const posts    = existing ? JSON.parse(existing) : []
+      posts.unshift(post)
+      const trimmed  = posts.slice(0, 50)
+
+      await env.RUSTIC_VINE_KV.put('insider_feed_posts', JSON.stringify(trimmed))
+
+      // Also clear any cached feed response so the next GET is fresh
+      await env.RUSTIC_VINE_KV.delete('insider_feed_cache')
+
+      return json({ success: true, total: trimmed.length })
     }
 
     // ── POST /subscribe ───────────────────────────────────────────────────────
