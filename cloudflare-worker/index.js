@@ -274,19 +274,50 @@ export default {
     // feed array (max 50 posts kept).
     if (method === 'POST' && url.pathname === '/insider-post') {
       const notifySecret = env.NOTIFY_SECRET || ''
-      const incoming     = request.headers.get('X-Notify-Secret') || ''
 
-      if (!notifySecret || incoming !== notifySecret) {
+      // Parse body — Wix Automations may send JSON or form-encoded
+      let post = {}
+      let contentType = ''
+      try {
+        contentType = request.headers.get('Content-Type') || ''
+        console.log('[insider-post] Content-Type:', contentType)
+
+        if (contentType.includes('application/json')) {
+          post = await request.json()
+        } else if (contentType.includes('application/x-www-form-urlencoded')
+                || contentType.includes('multipart/form-data')) {
+          const form = await request.formData()
+          for (const [k, v] of form.entries()) post[k] = v
+        } else {
+          const text = await request.text()
+          console.log('[insider-post] Raw body (first 300):', text.slice(0, 300))
+          try { post = JSON.parse(text) } catch { post = { content: text } }
+        }
+
+        console.log('[insider-post] Keys received:', Object.keys(post).join(', '))
+        console.log('[insider-post] _secret present:', !!post._secret,
+          '| header secret present:', !!request.headers.get('X-Notify-Secret'))
+
+        if (!post || typeof post !== 'object') throw new Error('Empty body')
+      } catch (e) {
+        console.error('[insider-post] Parse error:', e.message)
+        return err(`Bad request: ${e.message}`)
+      }
+
+      // Validate secret — accept from header OR body param `_secret`
+      const headerSecret = request.headers.get('X-Notify-Secret') || ''
+      const bodySecret   = (post._secret || '').trim()
+      const incoming     = (headerSecret || bodySecret)
+      const secretMatch  = notifySecret && incoming === notifySecret
+      console.log('[insider-post] secret match:', secretMatch,
+        '| incoming len:', incoming.length, '| expected len:', notifySecret.length)
+
+      if (!secretMatch) {
         return err('Unauthorized', 401)
       }
 
-      let post
-      try {
-        post = await request.json()
-        if (!post || typeof post !== 'object') throw new Error('Empty body')
-      } catch (e) {
-        return err(`Bad request: ${e.message}`)
-      }
+      // Remove the secret from the post object so it's not stored in KV
+      delete post._secret
 
       // Stamp with server time if missing
       if (!post.createdDate) post.createdDate = new Date().toISOString()
