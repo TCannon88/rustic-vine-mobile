@@ -289,7 +289,7 @@ function MemberContent({ currentMember, groupInfo, recentMembers, onLogout }) {
       )}
 
       {/* Group Feed — live posts from the Wix Insiders group */}
-      <GroupFeed enabled={true} />
+      <GroupFeed tokens={auth.tokens} enabled={true} />
 
       {/* Group links */}
       <section className="mt-4 px-4 space-y-2">

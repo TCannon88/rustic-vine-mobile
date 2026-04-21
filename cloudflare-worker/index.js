@@ -246,6 +246,69 @@ export default {
       }
     }
 
+    // ── GET /insider-feed ─────────────────────────────────────────────────────
+    // Proxy for the Wix Velo insidersFeed HTTP function.
+    // - Requires Authorization header (Wix member token from PWA)
+    // - Caches in KV for 60 seconds to avoid hammering Wix
+    // - Injects X-RV-Secret so the secret never touches the browser
+    if (method === 'GET' && url.pathname === '/insider-feed') {
+      // Require a member token — must be present (we trust the PWA gate for
+      // actual membership checks; here we just reject anonymous callers)
+      const authHeader = request.headers.get('Authorization') || ''
+      if (!authHeader.startsWith('Bearer ') && !authHeader) {
+        return err('Unauthorized', 401)
+      }
+
+      const WIX_VELO_URL = env.WIX_VELO_URL || 'https://www.therustic-vine.com'
+      const RV_FEED_SECRET = env.RV_FEED_SECRET
+
+      if (!RV_FEED_SECRET) {
+        return json({ posts: [], error: 'Feed not configured on server', fetchedAt: new Date().toISOString() })
+      }
+
+      // KV cache check (60-second TTL)
+      const cacheKey = 'insider_feed_cache'
+      const cached = await env.RUSTIC_VINE_KV.get(cacheKey)
+      if (cached) {
+        const { data, ts } = JSON.parse(cached)
+        if (Date.now() - ts < 60 * 1000) {
+          return json(data)
+        }
+      }
+
+      try {
+        const wixRes = await fetch(
+          `${WIX_VELO_URL}/_functions/insidersFeed`,
+          {
+            headers: {
+              'X-RV-Secret': RV_FEED_SECRET,
+              'Accept':      'application/json',
+            },
+          }
+        )
+
+        if (!wixRes.ok) {
+          const errText = await wixRes.text().catch(() => '')
+          console.error(`Velo insidersFeed error ${wixRes.status}: ${errText}`)
+          return json({ posts: [], error: `Wix returned ${wixRes.status}`, fetchedAt: new Date().toISOString() })
+        }
+
+        const data = await wixRes.json()
+
+        // Cache the response
+        await env.RUSTIC_VINE_KV.put(
+          cacheKey,
+          JSON.stringify({ data, ts: Date.now() }),
+          { expirationTtl: 120 }  // KV expiry as safety net
+        )
+
+        return json(data)
+      } catch (e) {
+        console.error('insider-feed proxy error:', e)
+        return json({ posts: [], error: 'Fetch failed', fetchedAt: new Date().toISOString() })
+      }
+    }
+
     // ── POST /subscribe ───────────────────────────────────────────────────────
     if (method === 'POST' && url.pathname === '/subscribe') {
       let sub
