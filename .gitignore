@@ -10,6 +10,7 @@ dist-ssr/
 # env files (NEVER commit secrets)
 .env
 .env.local
+.env.production
 .env.*.local
 
 # Wrangler / Cloudflare
