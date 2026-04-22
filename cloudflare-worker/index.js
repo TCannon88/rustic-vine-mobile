@@ -8,6 +8,7 @@
  *   GET  /blog-posts        — proxied Wix Blog posts with 15-min KV cache
  *   GET  /insider-feed      — Insiders group feed (served from KV; posts pushed by Velo/Automations)
  *   POST /insider-post      — webhook: Velo events / Wix Automations push a post into KV
+ *   POST /chat-token        — issues a signed Ably TokenRequest after verifying Wix member identity
  *   POST /subscribe         — register a Web Push subscription
  *   POST /notify            — broadcast a push notification to all subscribers
  *
@@ -369,6 +370,103 @@ export default {
       await env.RUSTIC_VINE_KV.delete('insider_feed_cache')
 
       return json({ success: true, total: trimmed.length })
+    }
+
+    // ── POST /chat-token ──────────────────────────────────────────────────────
+    // Issues a short-lived Ably TokenRequest for the live chat channel.
+    // Verifies the caller's Wix access token with the Wix Members API (Option B)
+    // before minting the token so clientId cannot be spoofed by the browser.
+    // Guest fallback is issued if no/invalid accessToken is supplied.
+    if (method === 'POST' && url.pathname === '/chat-token') {
+      const ABLY_ROOT_KEY = env.ABLY_ROOT_KEY || ''
+      const WIX_SITE_ID   = env.WIX_SITE_ID   || ''
+
+      if (!ABLY_ROOT_KEY) {
+        return err('Chat not configured', 503)
+      }
+
+      // Parse request body
+      let body = {}
+      try { body = await request.json() } catch { /* empty body is fine */ }
+      const { accessToken } = body
+
+      // ── Verify Wix member identity ────────────────────────────────────────
+      let memberId      = null
+      let memberName    = null
+      let memberAvatar  = null
+
+      if (accessToken && WIX_SITE_ID) {
+        try {
+          const wixRes = await fetch(
+            'https://www.wixapis.com/members/v1/members/my?fieldsets=FULL',
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'wix-site-id':   WIX_SITE_ID,
+              },
+              signal: AbortSignal.timeout(5000),
+            }
+          )
+
+          if (wixRes.ok) {
+            const { member: m } = await wixRes.json()
+            memberId     = m.id
+            const nick   = m.profile?.nickname || ''
+            const first  = m.contact?.firstName || ''
+            const last   = m.contact?.lastName  || ''
+            const full   = `${first} ${last}`.trim()
+            const email  = (m.loginEmail || '').split('@')[0]
+              .replace(/[._-]/g, ' ')
+              .replace(/\b\w/g, c => c.toUpperCase())
+            memberName   = nick || full || email || 'Crafter'
+            memberAvatar = m.profile?.photo?.url ?? null
+          } else {
+            console.warn('[chat-token] Wix member verify failed:', wixRes.status)
+          }
+        } catch (e) {
+          console.error('[chat-token] Wix verify error:', e.message)
+        }
+      }
+
+      // ── Guest fallback ────────────────────────────────────────────────────
+      if (!memberId) {
+        memberId    = `guest-${crypto.randomUUID()}`
+        memberName  = `Crafter#${Math.floor(1000 + Math.random() * 9000)}`
+        memberAvatar = null
+      }
+
+      // ── Build signed Ably TokenRequest ────────────────────────────────────
+      // Ably token request spec:
+      //   https://ably.com/docs/auth/token#token-request-format
+      // String to sign (each field terminated by newline):
+      //   keyName \n ttl \n capability \n clientId \n timestamp \n nonce \n
+      const [keyName, keySecret] = ABLY_ROOT_KEY.split(':')
+      const capability = JSON.stringify({
+        'rustic-vine:live-chat': ['publish', 'subscribe', 'presence'],
+      })
+      const ttl       = 3600 * 1000          // 1 hour in ms
+      const timestamp = Date.now()
+      const nonce     = crypto.randomUUID().replace(/-/g, '')
+
+      const toSign = [keyName, ttl, capability, memberId, timestamp, nonce, ''].join('\n')
+
+      const enc       = new TextEncoder()
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        enc.encode(keySecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      )
+      const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(toSign))
+      const mac    = btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+
+      const tokenRequest = { keyName, ttl, capability, clientId: memberId, timestamp, nonce, mac }
+
+      return json({
+        tokenRequest,
+        member: { id: memberId, name: memberName, avatarUrl: memberAvatar },
+      })
     }
 
     // ── POST /subscribe ───────────────────────────────────────────────────────

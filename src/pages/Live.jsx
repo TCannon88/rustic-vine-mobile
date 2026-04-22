@@ -213,7 +213,11 @@ export default function Live() {
       </div>
 
       {/* Chat panel */}
-      <ChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+      <ChatPanel
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        accessToken={tokens?.accessToken?.value ?? null}
+      />
 
       {/* Bottom safe area buffer */}
       <div className="h-safe-bottom bg-black" />

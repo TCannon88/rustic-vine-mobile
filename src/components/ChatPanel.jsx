@@ -4,16 +4,61 @@ import { SendIcon, XIcon } from './Icons.jsx'
 
 const STATUS_COLORS = {
   connected:    'bg-sage-500',
-  connecting:   'bg-gold',
+  connecting:   'bg-gold animate-pulse',
   disconnected: 'bg-red-500',
-  demo:         'bg-stone-400',
+  failed:       'bg-red-500',
+  initialized:  'bg-stone-400',
 }
 
-export default function ChatPanel({ isOpen, onClose }) {
-  const { messages, sendMessage, connectionState, guestName } = useAblyChat({ enabled: isOpen })
-  const [input, setInput]       = useState('')
-  const messagesEndRef           = useRef(null)
-  const inputRef                 = useRef(null)
+// ── Avatar helper ─────────────────────────────────────────────────────────────
+function Avatar({ name, avatarUrl, size = 'w-7 h-7' }) {
+  const initials = (name || '?')
+    .split(' ')
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className={`${size} rounded-full object-cover flex-shrink-0 border border-stone-200`}
+      />
+    )
+  }
+
+  // Deterministic background colour from name
+  const colours = [
+    'bg-burgundy-600', 'bg-sage-600', 'bg-gold/80',
+    'bg-stone-500',    'bg-indigo-500', 'bg-rose-500',
+  ]
+  const colour = colours[(name || '').charCodeAt(0) % colours.length]
+
+  return (
+    <div
+      className={`${size} rounded-full ${colour} flex items-center justify-center
+        flex-shrink-0 text-white text-[10px] font-bold border border-white/20`}
+    >
+      {initials}
+    </div>
+  )
+}
+
+// ── ChatPanel ─────────────────────────────────────────────────────────────────
+/**
+ * @param {boolean}  isOpen      — slides panel open/closed
+ * @param {function} onClose     — close button handler
+ * @param {string}   accessToken — Wix OAuth access token (tokens.accessToken.value)
+ */
+export default function ChatPanel({ isOpen, onClose, accessToken }) {
+  const { messages, sendMessage, connectionState, chatMember } =
+    useAblyChat({ enabled: isOpen, accessToken })
+
+  const [input, setInput]   = useState('')
+  const messagesEndRef       = useRef(null)
+  const inputRef             = useRef(null)
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -28,7 +73,9 @@ export default function ChatPanel({ isOpen, onClose }) {
     inputRef.current?.focus()
   }
 
-  const dotColor = STATUS_COLORS[connectionState] || 'bg-stone-400'
+  const dotColor    = STATUS_COLORS[connectionState] || 'bg-stone-400'
+  const displayName = chatMember?.name || '…'
+  const isGuest     = chatMember?.id?.startsWith('guest-')
 
   return (
     <div
@@ -36,22 +83,35 @@ export default function ChatPanel({ isOpen, onClose }) {
         ${isOpen ? 'h-72' : 'h-0 overflow-hidden'}`}
       id="chat-panel"
     >
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-stone-100 bg-cream/80 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${dotColor} animate-pulse`} />
+          <span className={`w-2 h-2 rounded-full ${dotColor}`} />
           <span className="font-semibold text-sm text-burgundy-800">Live Chat</span>
-          <span className="text-xs text-stone-400">
-            {connectionState === 'demo' ? '(preview mode)' : connectionState}
-          </span>
+          {connectionState !== 'connected' && (
+            <span className="text-xs text-stone-400 capitalize">{connectionState}</span>
+          )}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-stone-500">You: <strong>{guestName}</strong></span>
+
+        <div className="flex items-center gap-2">
+          {chatMember && (
+            <div className="flex items-center gap-1.5">
+              <Avatar name={chatMember.name} avatarUrl={chatMember.avatarUrl} size="w-6 h-6" />
+              <span className="text-xs text-stone-500">
+                {isGuest ? (
+                  <span className="italic">{displayName}</span>
+                ) : (
+                  <strong className="text-burgundy-700">{displayName}</strong>
+                )}
+              </span>
+            </div>
+          )}
+
           {onClose && (
             <button
               id="chat-close-btn"
               onClick={onClose}
-              className="text-stone-400 hover:text-stone-600 transition-colors"
+              className="text-stone-400 hover:text-stone-600 transition-colors ml-1"
               aria-label="Close chat"
             >
               <XIcon className="w-4 h-4" />
@@ -60,35 +120,46 @@ export default function ChatPanel({ isOpen, onClose }) {
         </div>
       </div>
 
-      {/* Messages list */}
-      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2 scrollbar-hide">
+      {/* ── Messages ───────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2.5 scrollbar-hide">
         {messages.length === 0 ? (
           <p className="text-center text-stone-400 text-sm py-4 italic">
             Be the first to say hi! 👋
           </p>
         ) : (
           messages.map((msg) => {
-            const isOwn = msg.author === guestName
+            const isOwn = msg.memberId === chatMember?.id
             return (
               <div
                 key={msg.id}
-                className={`flex flex-col gap-0.5 ${isOwn ? 'items-end' : 'items-start'}`}
+                className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}
               >
+                {/* Avatar — only for other people's messages */}
                 {!isOwn && (
-                  <span className="text-xs font-semibold text-burgundy-600 ml-2">
-                    {msg.author}
-                  </span>
+                  <Avatar
+                    name={msg.author}
+                    avatarUrl={msg.avatarUrl}
+                    size="w-7 h-7"
+                  />
                 )}
-                <div
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm
-                    ${isOwn
-                      ? 'bg-burgundy-700 text-cream rounded-br-sm'
-                      : 'bg-stone-100 text-stone-800 rounded-bl-sm'
-                    }
-                    ${msg.isPending ? 'opacity-60' : 'opacity-100'}
-                  `}
-                >
-                  {msg.text}
+
+                <div className={`flex flex-col gap-0.5 max-w-[75%] ${isOwn ? 'items-end' : 'items-start'}`}>
+                  {!isOwn && (
+                    <span className="text-[11px] font-semibold text-burgundy-600 ml-1">
+                      {msg.author}
+                    </span>
+                  )}
+                  <div
+                    className={`rounded-2xl px-3 py-2 text-sm leading-snug
+                      ${isOwn
+                        ? 'bg-burgundy-700 text-cream rounded-br-sm'
+                        : 'bg-stone-100 text-stone-800 rounded-bl-sm'
+                      }
+                      ${msg.isPending ? 'opacity-60' : 'opacity-100'}
+                      transition-opacity duration-300`}
+                  >
+                    {msg.text}
+                  </div>
                 </div>
               </div>
             )
@@ -97,7 +168,7 @@ export default function ChatPanel({ isOpen, onClose }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* ── Input ──────────────────────────────────────────────────────────── */}
       <form
         onSubmit={handleSubmit}
         className="flex items-center gap-2 px-3 py-2 border-t border-stone-100 flex-shrink-0"
@@ -121,7 +192,7 @@ export default function ChatPanel({ isOpen, onClose }) {
           disabled={!input.trim()}
           className="w-9 h-9 rounded-full bg-burgundy-700 text-cream flex items-center justify-center
             disabled:opacity-40 hover:bg-burgundy-800 transition-all duration-200
-            active:scale-95"
+            active:scale-95 flex-shrink-0"
           aria-label="Send message"
         >
           <SendIcon className="w-4 h-4" />

@@ -1,101 +1,150 @@
+/**
+ * useAblyChat — Live chat via Ably Realtime, token-authenticated through the
+ * Cloudflare Worker's POST /chat-token endpoint.
+ *
+ * Flow:
+ *   1. Hook calls POST /chat-token with the caller's Wix access token.
+ *   2. Worker verifies the token against Wix Members API, resolves real name
+ *      + avatar, then signs and returns a short-lived Ably TokenRequest.
+ *   3. Ably client is constructed in authCallback mode — SDK handles token
+ *      renewal automatically before expiry.
+ *   4. Messages include { text, displayName, avatarUrl } in the payload so
+ *      every subscriber renders the real member identity.
+ *
+ * Props:
+ *   enabled     {boolean} — connect only when the chat panel is open
+ *   accessToken {string}  — Wix OAuth access token (tokens.accessToken.value)
+ */
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Ably from 'ably'
 
-const ABLY_KEY   = import.meta.env.VITE_ABLY_SUBSCRIBE_KEY || ''
-const CHANNEL    = 'rustic-vine:live-chat'
-const MAX_MSGS   = 200
+const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL || 'http://localhost:8787'
+const CHANNEL       = 'rustic-vine:live-chat'
+const MAX_MSGS      = 200
 
-let ablyClient = null
-
-function getAblyClient() {
-  if (!ablyClient && ABLY_KEY) {
-    ablyClient = new Ably.Realtime({
-      key: ABLY_KEY,
-      clientId: getGuestName(),
-    })
-  }
-  return ablyClient
+// ── Token fetch ───────────────────────────────────────────────────────────────
+async function fetchChatToken(accessToken) {
+  const res = await fetch(`${CF_WORKER_URL}/chat-token`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ accessToken: accessToken || null }),
+    signal:  AbortSignal.timeout(8000),
+  })
+  if (!res.ok) throw new Error(`/chat-token ${res.status}`)
+  return res.json() // { tokenRequest, member: { id, name, avatarUrl } }
 }
 
-function getGuestName() {
-  const stored = localStorage.getItem('rv:chat_name')
-  if (stored) return stored
-  const name = `Crafter#${Math.floor(1000 + Math.random() * 9000)}`
-  localStorage.setItem('rv:chat_name', name)
-  return name
-}
+// ── Hook ──────────────────────────────────────────────────────────────────────
+export function useAblyChat({ enabled = true, accessToken = null } = {}) {
+  const [messages,         setMessages]    = useState([])
+  const [connectionState,  setConnState]   = useState('initialized')
+  const [chatMember,       setChatMember]  = useState(null)
 
-/**
- * Connects to the Ably live-chat channel and returns messages + sendMessage.
- */
-export function useAblyChat({ enabled = true } = {}) {
-  const [messages, setMessages]           = useState([])
-  const [connectionState, setConnState]   = useState('initialized')
   const channelRef = useRef(null)
-  const guestName  = getGuestName()
+  const clientRef  = useRef(null)
 
   useEffect(() => {
     if (!enabled) return
 
-    const client = getAblyClient()
-    if (!client) {
-      // Ably not configured — use demo mode with local messages only
-      setConnState('demo')
-      return
+    let cancelled = false
+
+    async function connect() {
+      try {
+        // ── Initial token fetch (also resolves member identity) ─────────────
+        const { tokenRequest, member } = await fetchChatToken(accessToken)
+        if (cancelled) return
+
+        setChatMember(member)
+
+        // ── Build Ably client with authCallback ──────────────────────────────
+        // authCallback is called on connect and auto-renewed before TTL expires.
+        const client = new Ably.Realtime({
+          authCallback: async (_, callback) => {
+            try {
+              const { tokenRequest: tr } = await fetchChatToken(accessToken)
+              callback(null, tr)
+            } catch (e) {
+              callback(e, null)
+            }
+          },
+          // Provide the first token directly so Ably doesn't make a redundant
+          // authCallback call on initial connect.
+          token:    tokenRequest,
+          clientId: member.id,
+        })
+
+        clientRef.current = client
+
+        client.connection.on((stateChange) => {
+          if (!cancelled) setConnState(stateChange.current)
+        })
+
+        // ── Subscribe ────────────────────────────────────────────────────────
+        const channel = client.channels.get(CHANNEL)
+        channelRef.current = channel
+
+        channel.subscribe('message', (msg) => {
+          if (cancelled) return
+          setMessages(prev => {
+            const next = [...prev, {
+              id:        msg.id,
+              // displayName is in the payload; clientId is the Wix member ID
+              author:    msg.data?.displayName || msg.clientId || 'Guest',
+              avatarUrl: msg.data?.avatarUrl   || null,
+              text:      msg.data?.text        || '',
+              timestamp: msg.timestamp,
+              memberId:  msg.clientId,
+            }]
+            return next.slice(-MAX_MSGS)
+          })
+        })
+      } catch (err) {
+        console.error('[useAblyChat] connect error:', err)
+        if (!cancelled) setConnState('failed')
+      }
     }
 
-    const channel = client.channels.get(CHANNEL)
-    channelRef.current = channel
-
-    // Track connection state
-    client.connection.on((stateChange) => {
-      setConnState(stateChange.current)
-    })
-
-    // Subscribe to incoming messages
-    channel.subscribe('message', (msg) => {
-      setMessages(prev => {
-        const next = [...prev, {
-          id:        msg.id,
-          author:    msg.clientId || 'Guest',
-          text:      msg.data.text,
-          timestamp: msg.timestamp,
-        }]
-        return next.slice(-MAX_MSGS) // keep last 200
-      })
-    })
+    connect()
 
     return () => {
-      channel.unsubscribe()
+      cancelled = true
+      channelRef.current?.unsubscribe()
+      clientRef.current?.close()
+      channelRef.current = null
+      clientRef.current  = null
     }
-  }, [enabled])
+  }, [enabled, accessToken])
 
+  // ── Send ──────────────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text) => {
-    const trimmed = text.trim()
+    const trimmed = text?.trim()
     if (!trimmed) return
 
+    // Optimistic local bubble
     const optimistic = {
       id:        `local-${Date.now()}`,
-      author:    guestName,
+      author:    chatMember?.name    || 'You',
+      avatarUrl: chatMember?.avatarUrl || null,
       text:      trimmed,
       timestamp: Date.now(),
+      memberId:  chatMember?.id      || 'local',
       isPending: true,
     }
-
-    // Optimistic local display
     setMessages(prev => [...prev, optimistic])
 
-    if (!channelRef.current) {
-      // Demo mode — just show locally
-      return
-    }
+    if (!channelRef.current) return   // panel closed / not connected
 
     try {
-      await channelRef.current.publish('message', { text: trimmed })
+      await channelRef.current.publish('message', {
+        text,
+        displayName: chatMember?.name     || 'Guest',
+        avatarUrl:   chatMember?.avatarUrl || null,
+      })
     } catch (err) {
       console.error('[useAblyChat] send error:', err)
     }
-  }, [guestName])
+  }, [chatMember])
 
-  return { messages, sendMessage, connectionState, guestName }
+  return { messages, sendMessage, connectionState, chatMember }
 }
