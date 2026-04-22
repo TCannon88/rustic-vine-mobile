@@ -4,16 +4,40 @@
  * File location in Wix editor:  backend/http-functions.js
  *
  * Active endpoints:
- *   (none currently — group feed is now event-driven via groups-events.js)
- *
- * Reserved for future use:
- *   POST /_functions/adminPost  — manually inject a post into the CF Worker KV
- *                                  (useful for testing without curl)
+ *   GET  /_functions/authCallback  — OAuth relay: redirects back to PWA with code+state
+ *   POST /_functions/adminPost     — manually inject a post into the CF Worker KV
+ *                                    (useful for testing without curl)
  */
 
-import { ok, forbidden } from 'wix-http-functions';
+import { ok, forbidden, response } from 'wix-http-functions';
 import { getSecret } from 'wix-secrets-backend';
 import { fetch as veloFetch } from 'wix-fetch';
+
+// PWA origin — update this if the production domain changes
+const PWA_ORIGIN = 'https://rustic-vine-mobile.tomcannon92.workers.dev'
+
+/**
+ * GET /_functions/authCallback
+ *
+ * OAuth relay: Wix redirects here after login (because workers.dev is not an
+ * accepted Wix redirect domain). This function immediately 302-redirects the
+ * user back to the PWA's /auth/callback with the same code+state params so
+ * the PWA can complete the token exchange against its own localStorage state.
+ */
+export function get_authCallback(request) {
+  const code  = (request.query && request.query.code)  || ''
+  const state = (request.query && request.query.state) || ''
+  const error = (request.query && request.query.error) || ''
+
+  let dest = `${PWA_ORIGIN}/auth/callback`
+  const params = []
+  if (code)  params.push(`code=${encodeURIComponent(code)}`)
+  if (state) params.push(`state=${encodeURIComponent(state)}`)
+  if (error) params.push(`error=${encodeURIComponent(error)}`)
+  if (params.length) dest += '?' + params.join('&')
+
+  return response({ status: 302, headers: { Location: dest }, body: '' })
+}
 
 function corsHeaders() {
   return {

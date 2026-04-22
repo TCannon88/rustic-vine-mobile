@@ -22,6 +22,23 @@ const TOKENS_KEY    = 'rv:wix_tokens'
 const OAUTH_KEY     = 'rv:wix_oauth_data'
 const CALLBACK_PATH = '/auth/callback'
 
+// ── Redirect URI resolution ────────────────────────────────────────────────────
+// Wix does not accept workers.dev as a redirect domain.
+// For non-localhost non-production origins we relay through the Wix site
+// (_functions/authCallback), which immediately redirects back to us with the
+// same ?code=&state= params so AuthCallback.jsx can complete the exchange.
+function getCallbackUri() {
+  const origin = window.location.origin
+  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+    return `${origin}${CALLBACK_PATH}`
+  }
+  if (origin === 'https://app.therustic-vine.com') {
+    return `${origin}${CALLBACK_PATH}`
+  }
+  // workers.dev or any other staging origin — use Wix relay
+  return 'https://www.therustic-vine.com/_functions/authCallback'
+}
+
 // ── Wix client singleton (recreated when tokens change) ───────────────────────
 let _client = null
 
@@ -122,7 +139,7 @@ export function useWixAuth() {
     try {
       const tempClient = getWixClient(null)
       const oAuthData  = tempClient.auth.generateOAuthData(
-        `${window.location.origin}${CALLBACK_PATH}`,
+        getCallbackUri(),
         window.location.href  // originalUri — where to return after login
       )
       localStorage.setItem(OAUTH_KEY, JSON.stringify(oAuthData))
