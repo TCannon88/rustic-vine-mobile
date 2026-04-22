@@ -6,6 +6,24 @@ import logo from '../assets/logo.png'
 
 const CF_WORKER_URL = import.meta.env.VITE_CF_WORKER_URL || 'http://localhost:8787'
 
+// ── Next Tuesday 3:30 PM CDT ─────────────────────────────────────────────────
+// CDT = UTC-5, so 3:30 PM CDT = 20:30 UTC.
+// Returns a Date for the next upcoming Tuesday at that time.
+function getNextTuesdayCDT() {
+  const now = new Date()
+  const d   = new Date(now)
+
+  // How many days until Tuesday (0=Sun … 2=Tue … 6=Sat)
+  const daysUntil = (2 - d.getUTCDay() + 7) % 7
+  d.setUTCDate(d.getUTCDate() + daysUntil)
+  d.setUTCHours(20, 30, 0, 0) // 20:30 UTC = 3:30 PM CDT
+
+  // If that moment has already passed today, jump to next week
+  if (d <= now) d.setUTCDate(d.getUTCDate() + 7)
+
+  return d
+}
+
 // ── Countdown Timer ─────────────────────────────────────────────────────────
 function useCountdown(targetDate) {
   const [timeLeft, setTimeLeft] = useState({})
@@ -124,9 +142,9 @@ function BlogCard({ post }) {
 
 // ── Demo Data ────────────────────────────────────────────────────────────────
 const DEMO_EVENT = {
-  title:       "Spring Wreath Craft-Along with Lisa! 🌸",
-  description: "Join us for a live step-by-step wreath tutorial — kits ship the same week!",
-  date:        new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days out
+  title:       'Craft Along with Lisa!',
+  description: 'Join Lisa every Tuesday at 3:30 PM CDT for a live step-by-step craft tutorial. Kits ship the same week!',
+  date:        getNextTuesdayCDT().toISOString(),
   isLive:      false,
 }
 
@@ -164,7 +182,15 @@ export default function Home() {
   useEffect(() => {
     fetch(`${CF_WORKER_URL}/event`, { signal: AbortSignal.timeout(5000) })
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setEvent(data) })
+      .then(data => {
+        if (!data) return
+        // If no date set or date is in the past, auto-compute next Tuesday 3:30 PM CDT
+        const eventDate = data.date ? new Date(data.date) : null
+        const resolvedDate = (eventDate && eventDate > new Date())
+          ? data.date
+          : getNextTuesdayCDT().toISOString()
+        setEvent({ ...data, date: resolvedDate })
+      })
       .catch(() => {/* keep demo */})
   }, [])
 
