@@ -23,21 +23,33 @@
  *   NOTIFY_SECRET       — shared secret for /insider-post Velo webhook
  */
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Notify-Secret, X-RV-Secret',
+// ── CORS ─────────────────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = new Set([
+  'https://app.therustic-vine.com',
+  'http://localhost:5173',
+  'http://localhost:4173', // vite preview
+])
+
+function getCorsHeaders(request) {
+  const origin = request.headers.get('Origin') || ''
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : 'https://app.therustic-vine.com'
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Notify-Secret, X-RV-Secret',
+    'Vary': 'Origin',
+  }
 }
 
-function json(data, status = 200) {
+function json(data, status = 200, request) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(request) },
   })
 }
 
-function err(msg, status = 400) {
-  return json({ error: msg }, status)
+function err(msg, status = 400, request) {
+  return json({ error: msg }, status, request)
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -46,16 +58,21 @@ export default {
     const url    = new URL(request.url)
     const method = request.method.toUpperCase()
 
+    // Request-scoped helpers — bind CORS to this specific request's origin
+    // so every response automatically carries the right Allow-Origin header.
+    const j = (data, status = 200) => json(data, status, request)
+    const e = (msg,  status = 400) => err(msg,  status, request)
+
     // CORS preflight
     if (method === 'OPTIONS') {
-      return new Response(null, { headers: CORS_HEADERS })
+      return new Response(null, { headers: getCorsHeaders(request) })
     }
 
     // ── GET /event ────────────────────────────────────────────────────────────
     if (method === 'GET' && url.pathname === '/event') {
       const raw = await env.RUSTIC_VINE_KV.get('next_event')
       if (!raw) {
-        return json({
+        return j({
           title:       'Next Craft-Along TBD',
           description: 'Check back soon for the next live event!',
           date:        null,
@@ -63,14 +80,14 @@ export default {
           playbackId:  null,
         })
       }
-      return json(JSON.parse(raw))
+      return j(JSON.parse(raw))
     }
 
     // ── GET /featured-product ─────────────────────────────────────────────────
     if (method === 'GET' && url.pathname === '/featured-product') {
       const raw = await env.RUSTIC_VINE_KV.get('featured_product')
-      if (!raw) return json(null)
-      return json(JSON.parse(raw))
+      if (!raw) return j(null)
+      return j(JSON.parse(raw))
     }
 
     // ── GET /products ─────────────────────────────────────────────────────────
@@ -82,7 +99,7 @@ export default {
       if (cached) {
         const { data, ts } = JSON.parse(cached)
         if (Date.now() - ts < 5 * 60 * 1000) {
-          return json(data)
+          return j(data)
         }
       }
 
@@ -90,7 +107,7 @@ export default {
       const WIX_SITE_ID = env.WIX_SITE_ID
       const WIX_API_KEY = env.WIX_API_KEY
       if (!WIX_SITE_ID || !WIX_API_KEY) {
-        return json([]) // not configured
+        return j([]) // not configured
       }
 
       try {
@@ -110,7 +127,7 @@ export default {
         if (!wixRes.ok) {
           const errText = await wixRes.text().catch(() => '')
           console.error(`Wix products error ${wixRes.status}: ${errText}`)
-          return json([])
+          return j([])
         }
 
         const wixData = await wixRes.json()
@@ -123,10 +140,10 @@ export default {
           { expirationTtl: 300 }
         )
 
-        return json(products)
+        return j(products)
       } catch (e) {
         console.error('Wix proxy error:', e)
-        return json([])
+        return j([])
       }
     }
 
@@ -141,13 +158,13 @@ export default {
       if (cached) {
         const { data, ts } = JSON.parse(cached)
         if (Date.now() - ts < 15 * 60 * 1000) {
-          return json(data)
+          return j(data)
         }
       }
 
       const WIX_SITE_ID = env.WIX_SITE_ID
       const WIX_API_KEY = env.WIX_API_KEY
-      if (!WIX_SITE_ID || !WIX_API_KEY) return json([])
+      if (!WIX_SITE_ID || !WIX_API_KEY) return j([])
 
       try {
         const wixRes = await fetch(
@@ -163,7 +180,7 @@ export default {
         if (!wixRes.ok) {
           const errText = await wixRes.text().catch(() => '')
           console.error(`Wix blog error ${wixRes.status}: ${errText}`)
-          return json([])
+          return j([])
         }
 
         const wixData = await wixRes.json()
@@ -175,10 +192,10 @@ export default {
           { expirationTtl: 900 }
         )
 
-        return json(posts)
+        return j(posts)
       } catch (e) {
         console.error('Blog proxy error:', e)
-        return json([])
+        return j([])
       }
     }
 
@@ -194,14 +211,14 @@ export default {
       const cached = await env.RUSTIC_VINE_KV.get(cacheKey)
       if (cached) {
         const { data, ts } = JSON.parse(cached)
-        if (Date.now() - ts < 5 * 60 * 1000) return json(data)
+        if (Date.now() - ts < 5 * 60 * 1000) return j(data)
       }
 
       const WIX_SITE_ID = env.WIX_SITE_ID
       const WIX_API_KEY = env.WIX_API_KEY
       const WIX_GROUP_ID = env.WIX_GROUP_ID
       if (!WIX_SITE_ID || !WIX_API_KEY || !WIX_GROUP_ID) {
-        return json({ posts: [], error: 'Worker not configured for group feed' })
+        return j({ posts: [], error: 'Worker not configured for group feed' })
       }
 
       try {
@@ -221,7 +238,7 @@ export default {
         if (!wixRes.ok) {
           const errText = await wixRes.text().catch(() => '')
           console.error(`Wix group feed error ${wixRes.status}: ${errText}`)
-          return json({ posts: [], error: `Wix API ${wixRes.status}` })
+          return j({ posts: [], error: `Wix API ${wixRes.status}` })
         }
 
         const wixData = await wixRes.json()
@@ -242,10 +259,10 @@ export default {
           { expirationTtl: 300 }
         )
 
-        return json(payload)
+        return j(payload)
       } catch (e) {
         console.error('Group feed proxy error:', e)
-        return json({ posts: [], error: 'Fetch failed' })
+        return j({ posts: [], error: 'Fetch failed' })
       }
     }
 
@@ -256,13 +273,13 @@ export default {
     if (method === 'GET' && url.pathname === '/insider-feed') {
       const authHeader = request.headers.get('Authorization') || ''
       if (!authHeader) {
-        return err('Unauthorized', 401)
+        return e('Unauthorized', 401)
       }
 
       const raw = await env.RUSTIC_VINE_KV.get('insider_feed_posts')
       const posts = raw ? JSON.parse(raw) : []
 
-      return json({
+      return j({
         posts,
         fetchedAt: new Date().toISOString(),
         source:    'kv',
@@ -322,7 +339,7 @@ export default {
       } catch (e) {
         console.error('[insider-post] Parse error:', e.message)
         // Still return success so Wix doesn't mark the automation as failed
-        return json({ success: true, diagnostic: true, error: e.message })
+        return j({ success: true, diagnostic: true, error: e.message })
       }
 
       // Validate secret — accept from header OR body param `_secret`
@@ -334,7 +351,7 @@ export default {
         '| incoming len:', incoming.length, '| expected len:', notifySecret.length)
 
       if (!secretMatch) {
-        return err('Unauthorized', 401)
+        return e('Unauthorized', 401)
       }
 
       // Remove the secret from the post object so it's not stored in KV
@@ -369,7 +386,7 @@ export default {
       // Also clear any cached feed response so the next GET is fresh
       await env.RUSTIC_VINE_KV.delete('insider_feed_cache')
 
-      return json({ success: true, total: trimmed.length })
+      return j({ success: true, total: trimmed.length })
     }
 
     // ── POST /chat-token ──────────────────────────────────────────────────────
@@ -382,7 +399,7 @@ export default {
       const WIX_SITE_ID   = env.WIX_SITE_ID   || ''
 
       if (!ABLY_ROOT_KEY) {
-        return err('Chat not configured', 503)
+        return e('Chat not configured', 503)
       }
 
       // Parse request body
@@ -463,7 +480,7 @@ export default {
 
       const tokenRequest = { keyName, ttl, capability, clientId: memberId, timestamp, nonce, mac }
 
-      return json({
+      return j({
         tokenRequest,
         member: { id: memberId, name: memberName, avatarUrl: memberAvatar },
       })
@@ -476,7 +493,7 @@ export default {
         sub = await request.json()
         if (!sub?.endpoint) throw new Error('Missing endpoint')
       } catch {
-        return err('Invalid subscription object')
+        return e('Invalid subscription object')
       }
 
       // Load existing subscribers
@@ -490,7 +507,7 @@ export default {
         await env.RUSTIC_VINE_KV.put('push_subscribers', JSON.stringify(subscribers))
       }
 
-      return json({ success: true, count: subscribers.length })
+      return j({ success: true, count: subscribers.length })
     }
 
     // ── POST /notify ──────────────────────────────────────────────────────────
@@ -499,7 +516,7 @@ export default {
       const auth = request.headers.get('Authorization') || ''
       const adminKey = env.NOTIFY_ADMIN_KEY || ''
       if (adminKey && auth !== `Bearer ${adminKey}`) {
-        return err('Unauthorized', 401)
+        return e('Unauthorized', 401)
       }
 
       let payload
@@ -507,11 +524,11 @@ export default {
         payload = await request.json()
         if (!payload?.title) throw new Error('title is required')
       } catch (e) {
-        return err(e.message)
+        return e(e.message)
       }
 
       const subsRaw = await env.RUSTIC_VINE_KV.get('push_subscribers')
-      if (!subsRaw) return json({ sent: 0, message: 'No subscribers yet' })
+      if (!subsRaw) return j({ sent: 0, message: 'No subscribers yet' })
 
       const subscribers = JSON.parse(subsRaw)
 
@@ -529,11 +546,11 @@ export default {
         await env.RUSTIC_VINE_KV.put('push_subscribers', JSON.stringify(valid))
       }
 
-      return json({ sent, failed, total: subscribers.length })
+      return j({ sent, failed, total: subscribers.length })
     }
 
     // ── 404 ───────────────────────────────────────────────────────────────────
-    return err('Not found', 404)
+    return e('Not found', 404)
   },
 }
 

@@ -17,7 +17,7 @@ import { fetch as veloFetch } from 'wix-fetch';
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin':  '*',
+    'Access-Control-Allow-Origin':  'https://app.therustic-vine.com',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-RV-Secret',
     'Content-Type': 'application/json',
