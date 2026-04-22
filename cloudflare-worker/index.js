@@ -26,6 +26,7 @@
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
   'https://app.therustic-vine.com',
+  'https://rustic-vine-mobile.tomcannon92.workers.dev', // workers.dev PWA (pre-custom-domain)
   'http://localhost:5173',
   'http://localhost:4173', // vite preview
 ])
