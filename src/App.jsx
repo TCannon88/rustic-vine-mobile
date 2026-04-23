@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { HomeIcon, ShoppingBagIcon, PlayCircleIcon, StarIcon, UserCircleIcon } from './components/Icons.jsx'
 import logo from './assets/logo.png'
 
@@ -80,9 +80,28 @@ function PageLoader() {
   )
 }
 
+function OverflowDebug() {
+  const [items, setItems] = useState([])
+  useEffect(() => {
+    const vw = document.documentElement.clientWidth
+    const found = [...document.querySelectorAll('*')]
+      .filter(el => el.scrollWidth > vw)
+      .map(el => `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).trim().split(/\s+/).join('.') : ''} → ${el.scrollWidth}px`)
+    setItems(found.length ? found : ['No overflow found — vw=' + vw])
+  }, [])
+  return (
+    <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'rgba(0,0,0,0.85)', color:'#0f0', fontFamily:'monospace', fontSize:'11px', padding:'8px', maxHeight:'50vh', overflowY:'auto' }}>
+      <strong style={{color:'#ff0'}}>Overflow debug (scrollWidth &gt; {document.documentElement.clientWidth}px):</strong>
+      {items.map((s,i) => <div key={i} style={{marginTop:4, wordBreak:'break-all'}}>{s}</div>)}
+    </div>
+  )
+}
+
 export default function App() {
+  const isDebug = new URLSearchParams(window.location.search).has('debug')
   return (
     <BrowserRouter>
+      {isDebug && <OverflowDebug />}
       <div className="min-h-screen pb-20 w-full overflow-x-hidden">
         <Suspense fallback={<PageLoader />}>
           <Routes>
