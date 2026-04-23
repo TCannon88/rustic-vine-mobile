@@ -83,7 +83,7 @@ function PageLoader() {
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen pb-20">
+      <div className="min-h-screen pb-20 w-full overflow-x-hidden">
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/"               element={<Home />} />
