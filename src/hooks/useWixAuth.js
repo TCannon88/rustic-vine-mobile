@@ -14,7 +14,7 @@
 import { createClient, OAuthStrategy } from '@wix/sdk'
 import { members as wixMembersModule } from '@wix/members'
 import { groups, members as groupMembersModule, joinGroupRequests } from '@wix/groups'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CLIENT_ID     = import.meta.env.VITE_WIX_CLIENT_ID || ''
@@ -29,13 +29,15 @@ const CALLBACK_PATH = '/auth/callback'
 // same ?code=&state= params so AuthCallback.jsx can complete the exchange.
 function getCallbackUri() {
   const origin = window.location.origin
-  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+  if (
+    origin.startsWith('http://localhost') ||
+    origin.startsWith('http://127.0.0.1') ||
+    origin === 'https://rustic-vine-mobile.tomcannon92.workers.dev' ||
+    origin === 'https://app.therustic-vine.com'
+  ) {
     return `${origin}${CALLBACK_PATH}`
   }
-  if (origin === 'https://app.therustic-vine.com') {
-    return `${origin}${CALLBACK_PATH}`
-  }
-  // workers.dev or any other staging origin — use Wix relay
+  // Unknown origin — relay through Wix site as fallback
   return 'https://www.therustic-vine.com/_functions/authCallback'
 }
 
