@@ -76,11 +76,13 @@ function PageLoader() {
 }
 
 function OverflowDebug() {
-  const [items, setItems] = useState([])
+  const vwAtRender = window.innerWidth   // synchronous — no layout triggered
+  const [afterPaint, setAfterPaint] = useState(null)
+  const [wideEls, setWideEls] = useState([])
+
   useEffect(() => {
-    const vw = document.documentElement.clientWidth
-    // Use 360px as threshold — catches what overflowed at device-width even after
-    // Chrome expanded the layout viewport to 980px
+    const vw = window.innerWidth
+    setAfterPaint(vw)
     const threshold = 360
     const found = [...document.querySelectorAll('*')]
       .filter(el => {
@@ -96,12 +98,20 @@ function OverflowDebug() {
         const cls = el.className ? '.'+String(el.className).trim().split(/\s+/).slice(0,3).join('.') : ''
         return `${el.tagName}${id}${cls}: w=${bw} right=${right} scroll=${sw}`
       })
-    setItems(found.length ? found : [`vw=${vw} — nothing wider than ${threshold}px`])
+    setWideEls(found)
   }, [])
+
   return (
-    <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'rgba(0,0,0,0.85)', color:'#0f0', fontFamily:'monospace', fontSize:'11px', padding:'8px', maxHeight:'50vh', overflowY:'auto' }}>
-      <strong style={{color:'#ff0'}}>vw={document.documentElement.clientWidth} — elements wider than 360px:</strong>
-      {items.map((s,i) => <div key={i} style={{marginTop:4, wordBreak:'break-all'}}>{s}</div>)}
+    <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'rgba(0,0,0,0.9)', color:'#0f0', fontFamily:'monospace', fontSize:'12px', padding:'8px', maxHeight:'60vh', overflowY:'auto' }}>
+      <div style={{color:'#ff0', fontWeight:'bold', marginBottom:4}}>VIEWPORT WIDTH AT EACH STAGE:</div>
+      <div>① before React (main.jsx): <b style={{color:'#0ff'}}>{window.__vw0 ?? '?'}</b></div>
+      <div>② at App render:           <b style={{color:'#0ff'}}>{vwAtRender}</b></div>
+      <div>③ after paint (effect):    <b style={{color:'#0ff'}}>{afterPaint ?? '…'}</b></div>
+      <div style={{marginTop:6, color:'#ff0', fontWeight:'bold'}}>Elements &gt; 360px wide (at paint time):</div>
+      {wideEls.length
+        ? wideEls.map((s,i) => <div key={i} style={{marginTop:3, wordBreak:'break-all'}}>{s}</div>)
+        : afterPaint != null ? <div style={{color:'#0f0'}}>none — vw={afterPaint}</div> : null
+      }
     </div>
   )
 }

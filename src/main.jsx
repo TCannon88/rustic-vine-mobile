@@ -4,6 +4,9 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
 
+// Capture viewport width before React mounts — used by debug overlay
+window.__vw0 = window.innerWidth
+
 // Register PWA service worker with auto-update
 const updateSW = registerSW({
   onNeedRefresh() {
