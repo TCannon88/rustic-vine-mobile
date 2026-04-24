@@ -25,10 +25,9 @@ function BottomNav() {
   return (
     <nav
       id="bottom-nav"
-      className={`fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-stone-200 nav-safe
-        ${isLive ? 'hidden' : ''}`}
+      className={`fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-stone-200 nav-safe${isLive ? ' hidden' : ''}`}
     >
-      <div className="flex items-center justify-around px-2 pt-2">
+      <div className="grid grid-cols-5 pt-2">
         {navItems.map(({ to, icon: Icon, label, special }) => (
           <NavLink
             key={to}
@@ -36,21 +35,17 @@ function BottomNav() {
             id={`nav-${label.toLowerCase()}`}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-all duration-200
-              ${special
-                ? 'relative -top-4 bg-burgundy-700 text-cream shadow-warm-lg px-4 py-3 rounded-2xl'
-                : isActive
-                  ? 'text-burgundy-700'
-                  : 'text-stone-400 hover:text-stone-600'
-              }`
+              special
+                ? 'relative flex flex-col items-center gap-0.5 -top-4 bg-burgundy-700 text-cream shadow-warm-lg px-3 py-3 rounded-2xl mx-auto w-fit transition-all duration-200'
+                : `flex flex-col items-center gap-0.5 py-1 rounded-xl transition-all duration-200 w-full${isActive ? ' text-burgundy-700' : ' text-stone-400 hover:text-stone-600'}`
             }
           >
             {({ isActive }) => (
               <>
                 <Icon
-                  className={`w-6 h-6 transition-transform duration-200 ${isActive && !special ? 'scale-110' : ''}`}
+                  className={`w-6 h-6 transition-transform duration-200${isActive && !special ? ' scale-110' : ''}`}
                 />
-                <span className={`text-xs font-medium ${special ? 'text-cream' : ''}`}>
+                <span className={`text-xs font-medium${special ? ' text-cream' : ''}`}>
                   {label}
                 </span>
                 {special && (
@@ -67,14 +62,14 @@ function BottomNav() {
 
 function PageLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cream">
-      <div className="flex flex-col items-center gap-4 animate-fade-in">
+    <div className="min-h-screen bg-cream flex items-center justify-center">
+      <div className="text-center animate-fade-in">
         <img
           src={logo}
           alt="The Rustic Vine"
-          className="w-28 h-28 object-contain animate-pulse-slow"
+          className="w-28 h-28 object-contain animate-pulse-slow mx-auto"
         />
-        <p className="font-display text-burgundy-700 text-lg italic">Loading…</p>
+        <p className="font-display text-burgundy-700 text-lg italic mt-4">Loading…</p>
       </div>
     </div>
   )
