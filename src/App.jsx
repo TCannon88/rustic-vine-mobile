@@ -84,21 +84,28 @@ function OverflowDebug() {
   const [items, setItems] = useState([])
   useEffect(() => {
     const vw = document.documentElement.clientWidth
-    const threshold = 420  // anything wider than a large phone
+    // Use 360px as threshold — catches what overflowed at device-width even after
+    // Chrome expanded the layout viewport to 980px
+    const threshold = 360
     const found = [...document.querySelectorAll('*')]
-      .filter(el => el.scrollWidth > threshold || el.getBoundingClientRect().width > threshold)
+      .filter(el => {
+        const r = el.getBoundingClientRect()
+        return el.scrollWidth > threshold || r.width > threshold || r.right > threshold
+      })
       .map(el => {
         const sw = el.scrollWidth
-        const bw = Math.round(el.getBoundingClientRect().width)
+        const r = el.getBoundingClientRect()
+        const bw = Math.round(r.width)
+        const right = Math.round(r.right)
         const id = el.id ? '#'+el.id : ''
         const cls = el.className ? '.'+String(el.className).trim().split(/\s+/).slice(0,3).join('.') : ''
-        return `${el.tagName}${id}${cls}: scroll=${sw} rect=${bw}`
+        return `${el.tagName}${id}${cls}: w=${bw} right=${right} scroll=${sw}`
       })
     setItems(found.length ? found : [`vw=${vw} — nothing wider than ${threshold}px`])
   }, [])
   return (
     <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'rgba(0,0,0,0.85)', color:'#0f0', fontFamily:'monospace', fontSize:'11px', padding:'8px', maxHeight:'50vh', overflowY:'auto' }}>
-      <strong style={{color:'#ff0'}}>Overflow debug (scrollWidth &gt; {document.documentElement.clientWidth}px):</strong>
+      <strong style={{color:'#ff0'}}>vw={document.documentElement.clientWidth} — elements wider than 360px:</strong>
       {items.map((s,i) => <div key={i} style={{marginTop:4, wordBreak:'break-all'}}>{s}</div>)}
     </div>
   )
