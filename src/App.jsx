@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy } from 'react'
 import { HomeIcon, ShoppingBagIcon, PlayCircleIcon, StarIcon, UserCircleIcon } from './components/Icons.jsx'
 import logo from './assets/logo.png'
 
@@ -75,52 +75,9 @@ function PageLoader() {
   )
 }
 
-function OverflowDebug() {
-  const vwAtRender = window.innerWidth   // synchronous — no layout triggered
-  const [afterPaint, setAfterPaint] = useState(null)
-  const [wideEls, setWideEls] = useState([])
-
-  useEffect(() => {
-    const vw = window.innerWidth
-    setAfterPaint(vw)
-    const threshold = 360
-    const found = [...document.querySelectorAll('*')]
-      .filter(el => {
-        const r = el.getBoundingClientRect()
-        return el.scrollWidth > threshold || r.width > threshold || r.right > threshold
-      })
-      .map(el => {
-        const sw = el.scrollWidth
-        const r = el.getBoundingClientRect()
-        const bw = Math.round(r.width)
-        const right = Math.round(r.right)
-        const id = el.id ? '#'+el.id : ''
-        const cls = el.className ? '.'+String(el.className).trim().split(/\s+/).slice(0,3).join('.') : ''
-        return `${el.tagName}${id}${cls}: w=${bw} right=${right} scroll=${sw}`
-      })
-    setWideEls(found)
-  }, [])
-
-  return (
-    <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:9999, background:'rgba(0,0,0,0.9)', color:'#0f0', fontFamily:'monospace', fontSize:'12px', padding:'8px', maxHeight:'60vh', overflowY:'auto' }}>
-      <div style={{color:'#ff0', fontWeight:'bold', marginBottom:4}}>VIEWPORT WIDTH AT EACH STAGE:</div>
-      <div>① before React (main.jsx): <b style={{color:'#0ff'}}>{window.__vw0 ?? '?'}</b></div>
-      <div>② at App render:           <b style={{color:'#0ff'}}>{vwAtRender}</b></div>
-      <div>③ after paint (effect):    <b style={{color:'#0ff'}}>{afterPaint ?? '…'}</b></div>
-      <div style={{marginTop:6, color:'#ff0', fontWeight:'bold'}}>Elements &gt; 360px wide (at paint time):</div>
-      {wideEls.length
-        ? wideEls.map((s,i) => <div key={i} style={{marginTop:3, wordBreak:'break-all'}}>{s}</div>)
-        : afterPaint != null ? <div style={{color:'#0f0'}}>none — vw={afterPaint}</div> : null
-      }
-    </div>
-  )
-}
-
 export default function App() {
-  const isDebug = new URLSearchParams(window.location.search).has('debug')
   return (
     <BrowserRouter>
-      {isDebug && <OverflowDebug />}
       <div className="min-h-screen pb-20 w-full overflow-x-hidden">
         <Suspense fallback={<PageLoader />}>
           <Routes>
