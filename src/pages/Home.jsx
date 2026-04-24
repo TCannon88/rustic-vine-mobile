@@ -210,16 +210,18 @@ export default function Home() {
   return (
     <main id="home-page" className="min-h-screen bg-cream pb-6 animate-fade-in">
       {/* Page header */}
-      <header className="pt-10 pb-2 px-4 flex flex-col items-center">
+      <header className="pt-10 pb-2 px-4 text-center">
         <img
           src={logo}
           alt="The Rustic Vine"
-          className="w-36 h-36 object-contain"
+          width="144"
+          height="144"
+          className="w-36 h-36 object-contain mx-auto"
         />
-        <p className="text-xs uppercase tracking-[0.3em] text-burgundy-400 font-semibold -mt-2 mb-1">
+        <p className="text-xs uppercase tracking-widest text-burgundy-400 font-semibold -mt-2 mb-1">
           Faith · Craft · Community
         </p>
-        <p className="text-stone-500 text-sm text-center text-balance">
+        <p className="text-stone-500 text-sm text-balance">
           Find joy, healing, and community through faith-filled DIYs<br />
           and simple handmade creations
         </p>
